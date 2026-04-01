@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Drifttid">
+<meta name="theme-color" content="#1e4a7a">
+<title>Drifttidsberäkning</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f4f8;color:#1a1a1a;padding-bottom:100px}
+.topbar{background:#1e4a7a;color:#fff;padding:14px 16px;position:sticky;top:0;z-index:100}
+.topbar h1{font-size:17px;font-weight:700;margin-bottom:2px}
+.topbar p{font-size:12px;color:#a8c8e0}
+.tabs{display:flex;overflow-x:auto;background:#163d66;gap:2px;padding:6px 8px;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex-shrink:0;padding:7px 14px;font-size:12px;font-weight:600;color:#a8c8e0;border-radius:8px;cursor:pointer;white-space:nowrap;border:none;background:transparent}
+.tab.active{background:#fff;color:#1e4a7a}
+.page{display:none;padding:12px}
+.page.active{display:block}
+.card{background:#fff;border-radius:14px;padding:14px 16px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,0.08)}
+.card-title{font-size:13px;font-weight:700;color:#1e4a7a;margin-bottom:12px;text-transform:uppercase;letter-spacing:0.5px}
+.row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f0f0f0}
+.row:last-child{border-bottom:none}
+.row label{font-size:14px;color:#333;flex:1;line-height:1.4}
+.row input{width:90px;padding:8px;font-size:15px;text-align:right;border:1px solid #ddd;border-radius:8px;background:#f8f9fa;color:#1a1a1a;-webkit-appearance:none}
+.row input:focus{outline:2px solid #1e4a7a;background:#fff}
+.row .unit{font-size:12px;color:#888;min-width:36px;text-align:left}
+.result-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f0f0f0}
+.result-row:last-child{border-bottom:none}
+.result-row .rlabel{font-size:13px;color:#555}
+.result-row .rval{font-size:15px;font-weight:700;color:#1e4a7a;text-align:right}
+.result-row.total .rlabel{font-size:14px;font-weight:700;color:#1a1a1a}
+.result-row.total .rval{font-size:17px;color:#28a745}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.metric{background:#f0f5fa;border-radius:12px;padding:12px;text-align:center}
+.metric .mn{font-size:20px;font-weight:700;color:#1e4a7a}
+.metric .ml{font-size:11px;color:#888;margin-top:2px}
+.warn{background:#fff3cd;border-left:3px solid #e0a000;padding:8px 10px;border-radius:0 8px 8px 0;font-size:13px;color:#7d4e00;margin-bottom:10px}
+/* Sammanfattning */
+.sum-item{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f0f0f0}
+.sum-item:last-child{border-bottom:none}
+.sum-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;margin-right:8px}
+.sum-name{font-size:14px;color:#333;display:flex;align-items:center;flex:1}
+.sum-kr{font-size:14px;font-weight:700;color:#1e4a7a}
+.sum-total{background:#1e4a7a;color:#fff;border-radius:12px;padding:14px 16px;margin-top:12px}
+.sum-total .t1{font-size:13px;color:#a8c8e0}
+.sum-total .t2{font-size:26px;font-weight:700;margin-top:4px}
+.chart-bar{display:flex;align-items:center;gap:8px;margin:6px 0}
+.chart-bar .cb-label{font-size:12px;color:#555;width:80px;text-align:right;flex-shrink:0}
+.chart-bar .cb-track{flex:1;background:#f0f0f0;border-radius:4px;height:18px;overflow:hidden}
+.chart-bar .cb-fill{height:100%;border-radius:4px;transition:width 0.5s}
+.chart-bar .cb-val{font-size:12px;font-weight:700;color:#1e4a7a;min-width:60px}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>Drifttidsberäkning</h1>
+  <p id="proj-label">Mitt projekt</p>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="showPage('indata',this)">Indata</button>
+  <button class="tab" onclick="showPage('vent',this)">🔵 Ventilation</button>
+  <button class="tab" onclick="showPage('pump',this)">🟠 Pumpar</button>
+  <button class="tab" onclick="showPage('tryck',this)">⚙️ Tryckluft</button>
+  <button class="tab" onclick="showPage('kyla',this)">❄️ Kyla</button>
+  <button class="tab" onclick="showPage('belys',this)">💡 Belysning</button>
+  <button class="tab" onclick="showPage('trafo',this)">⚡ Transformator</button>
+  <button class="tab" onclick="showPage('samman',this)">📊 Sammanfattning</button>
+</div>
+
+<!-- INDATA -->
+<div id="page-indata" class="page active">
+  <div class="card">
+    <div class="card-title">Projektinformation</div>
+    <div class="row"><label>Projektnamn</label><input type="text" id="i_proj" value="Mitt projekt" oninput="updProj()"><span class="unit"></span></div>
+    <div class="row"><label>Handläggare</label><input type="text" id="i_hand" value="Ditt namn"><span class="unit"></span></div>
+    <div class="row"><label>Datum</label><input type="date" id="i_datum"><span class="unit"></span></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Energipriser</div>
+    <div class="row"><label>Elpris</label><input type="number" id="i_el" value="1.2" step="0.01" oninput="calcAll()"><span class="unit">kr/kWh</span></div>
+    <div class="row"><label>Värmepris</label><input type="number" id="i_vp" value="0.8" step="0.01" oninput="calcAll()"><span class="unit">kr/kWh</span></div>
+    <div class="row"><label>Kylapris</label><input type="number" id="i_kp" value="1.2" step="0.01" oninput="calcAll()"><span class="unit">kr/kWh</span></div>
+  </div>
+  <div class="card" style="background:#e8f4fd">
+    <div class="card-title">Snabbnavigering</div>
+    <div style="font-size:13px;color:#555;line-height:1.8">
+      Gå till respektive flik och fyll i värden.<br>
+      Beräkningar sker automatiskt.<br>
+      Se sammanfattning för totalkostnad.
+    </div>
+  </div>
+</div>
+
+<!-- VENTILATION -->
+<div id="page-vent" class="page">
+  <div class="card">
+    <div class="card-title">Effektberäkning</div>
+    <div class="row"><label>Luftflöde</label><input type="number" id="v_flode" value="1.25" step="0.01" oninput="calcVent()"><span class="unit">m³/s</span></div>
+    <div class="row"><label>Eleffekt tilluft</label><input type="number" id="v_el_till" value="2.12" step="0.01" oninput="calcVent()"><span class="unit">kW</span></div>
+    <div class="row"><label>Eleffekt frånluft</label><input type="number" id="v_el_fran" value="2.5" step="0.01" oninput="calcVent()"><span class="unit">kW</span></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Värmeberäkning (VVX)</div>
+    <div class="row"><label>Temp tilluft in</label><input type="number" id="v_t_till" value="17" step="0.5" oninput="calcVent()"><span class="unit">°C</span></div>
+    <div class="row"><label>Temp frånluft</label><input type="number" id="v_t_fran" value="21" step="0.5" oninput="calcVent()"><span class="unit">°C</span></div>
+    <div class="row"><label>VVX återvinning</label><input type="number" id="v_vvx" value="0.85" step="0.01" min="0" max="1" oninput="calcVent()"><span class="unit">0–1</span></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Drifttid</div>
+    <div class="row"><label>Drifttid per dag</label><input type="number" id="v_h_dag" value="10.5" step="0.5" oninput="calcVent()"><span class="unit">h/dag</span></div>
+    <div class="row"><label>Driftdagar per år</label><input type="number" id="v_dagar" value="250" step="1" oninput="calcVent()"><span class="unit">dagar</span></div>
+  </div>
+  <div class="card" style="background:#f0f8ff">
+    <div class="card-title">Resultat</div>
+    <div class="grid2">
+      <div class="metric"><div class="mn" id="vr_sfp">–</div><div class="ml">SFP kW/(m³/s)</div></div>
+      <div class="metric"><div class="mn" id="vr_drift">–</div><div class="ml">Drifttid h/år</div></div>
+      <div class="metric"><div class="mn" id="vr_el_e">–</div><div class="ml">Elenergi kWh/år</div></div>
+      <div class="metric"><div class="mn" id="vr_vp_e">–</div><div class="ml">Värmeenergi kWh/år</div></div>
+    </div>
+    <div class="result-row"><span class="rlabel">Elkostnad</span><span class="rval" id="vr_el_k">–</span></div>
+    <div class="result-row"><span class="rlabel">Värmekostnad</span><span class="rval" id="vr_vp_k">–</span></div>
+    <div class="result-row total"><span class="rlabel">Totalkostnad ventilation</span><span class="rval" id="vr_tot">–</span></div>
+  </div>
+</div>
+
+<!-- PUMPAR -->
+<div id="page-pump" class="page">
+  <div class="card">
+    <div class="card-title">Pumpdata</div>
+    <div class="row"><label>Pumpeffekt el</label><input type="number" id="p_el" value="1.5" step="0.1" oninput="calcPump()"><span class="unit">kW</span></div>
+    <div class="row"><label>Värmeeffekt</label><input type="number" id="p_vp" value="15" step="0.5" oninput="calcPump()"><span class="unit">kW</span></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Drifttid</div>
+    <div class="row"><label>Drifttid per dag</label><input type="number" id="p_h_dag" value="24" step="0.5" oninput="calcPump()"><span class="unit">h/dag</span></div>
+    <div class="row"><label>Driftdagar (värmesäsong)</label><input type="number" id="p_dagar" value="180" step="1" oninput="calcPump()"><span class="unit">dagar</span></div>
+  </div>
+  <div class="card" style="background:#fff8f0">
+    <div class="card-title">Resultat</div>
+    <div class="grid2">
+      <div class="metric"><div class="mn" id="pr_drift">–</div><div class="ml">Drifttid h/år</div></div>
+      <div class="metric"><div class="mn" id="pr_el_e">–</div><div class="ml">Elenergi kWh/år</div></div>
+      <div class="metric"><div class="mn" id="pr_vp_e">–</div><div class="ml">Värmeenergi kWh/år</div></div>
+      <div class="metric"><div class="mn" id="pr_vp_k">–</div><div class="ml">Värmekostnad kr/år</div></div>
+    </div>
+    <div class="result-row"><span class="rlabel">Elkostnad</span><span class="rval" id="pr_el_k">–</span></div>
+    <div class="result-row total"><span class="rlabel">Totalkostnad pumpar</span><span class="rval" id="pr_tot">–</span></div>
+  </div>
+</div>
+
+<!-- TRYCKLUFT -->
+<div id="page-tryck" class="page">
+  <div class="card">
+    <div class="card-title">Kompressordata</div>
+    <div class="row"><label>Effekt pålastad</label><input type="number" id="t_el_pa" value="15" step="0.5" oninput="calcTryck()"><span class="unit">kW</span></div>
+    <div class="row"><label>Effekt avlastad</label><input type="number" id="t_el_av" value="3" step="0.5" oninput="calcTryck()"><span class="unit">kW</span></div>
+    <div class="row"><label>Andel pålastad</label><input type="number" id="t_and_pa" value="0.7" step="0.05" min="0" max="1" oninput="calcTryck()"><span class="unit">0–1</span></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Drifttid</div>
+    <div class="row"><label>Drifttid per dag</label><input type="number" id="t_h_dag" value="16" step="0.5" oninput="calcTryck()"><span class="unit">h/dag</span></div>
+    <div class="row"><label>Driftdagar per år</label><input type="number" id="t_dagar" value="250" step="1" oninput="calcTryck()"><span class="unit">dagar</span></div>
+  </div>
+  <div class="card" style="background:#f5f5f5">
+    <div class="card-title">Resultat</div>
+    <div class="grid2">
+      <div class="metric"><div class="mn" id="tr_drift">–</div><div class="ml">Drifttid h/år</div></div>
+      <div class="metric"><div class="mn" id="tr_el_e">–</div><div class="ml">Elenergi kWh/år</div></div>
+    </div>
+    <div class="result-row total"><span class="rlabel">Totalkostnad tryckluft</span><span class="rval" id="tr_tot">–</span></div>
+  </div>
+</div>
+
+<!-- KYLA -->
+<div id="page-kyla" class="page">
+  <div class="card">
+    <div class="card-title">Kyldata</div>
+    <div class="row"><label>Kyleffekt</label><input type="number" id="k_kyl" value="20" step="0.5" oninput="calcKyla()"><span class="unit">kW</span></div>
+    <div class="row"><label>Eleffekt kompressor</label><input type="number" id="k_el" value="6" step="0.5" oninput="calcKyla()"><span class="unit">kW</span></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Drifttid</div>
+    <div class="row"><label>Drifttid per dag</label><input type="number" id="k_h_dag" value="12" step="0.5" oninput="calcKyla()"><span class="unit">h/dag</span></div>
+    <div class="row"><label>Driftdagar (kylsäsong)</label><input type="number" id="k_dagar" value="150" step="1" oninput="calcKyla()"><span class="unit">dagar</span></div>
+  </div>
+  <div class="card" style="background:#f0f8ff">
+    <div class="card-title">Resultat</div>
+    <div class="grid2">
+      <div class="metric"><div class="mn" id="kr_drift">–</div><div class="ml">Drifttid h/år</div></div>
+      <div class="metric"><div class="mn" id="kr_el_e">–</div><div class="ml">Elenergi kWh/år</div></div>
+    </div>
+    <div class="result-row total"><span class="rlabel">Totalkostnad kyla</span><span class="rval" id="kr_tot">–</span></div>
+  </div>
+</div>
+
+<!-- BELYSNING -->
+<div id="page-belys" class="page">
+  <div class="card">
+    <div class="card-title">Belysningsdata</div>
+    <div class="row"><label>Installerad effekt</label><input type="number" id="b_el" value="8" step="0.5" oninput="calcBelys()"><span class="unit">kW</span></div>
+    <div class="row"><label>Lokalarea</label><input type="number" id="b_area" value="800" step="10" oninput="calcBelys()"><span class="unit">m²</span></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Drifttid</div>
+    <div class="row"><label>Drifttid per dag</label><input type="number" id="b_h_dag" value="10" step="0.5" oninput="calcBelys()"><span class="unit">h/dag</span></div>
+    <div class="row"><label>Driftdagar per år</label><input type="number" id="b_dagar" value="250" step="1" oninput="calcBelys()"><span class="unit">dagar</span></div>
+  </div>
+  <div class="card" style="background:#fffdf0">
+    <div class="card-title">Resultat</div>
+    <div class="grid2">
+      <div class="metric"><div class="mn" id="br_specifik">–</div><div class="ml">Specifik effekt W/m²</div></div>
+      <div class="metric"><div class="mn" id="br_drift">–</div><div class="ml">Drifttid h/år</div></div>
+      <div class="metric"><div class="mn" id="br_el_e">–</div><div class="ml">Elenergi kWh/år</div></div>
+      <div class="metric"><div class="mn" id="br_el_k">–</div><div class="ml">Elkostnad kr/år</div></div>
+    </div>
+    <div class="result-row total"><span class="rlabel">Totalkostnad belysning</span><span class="rval" id="br_tot">–</span></div>
+  </div>
+</div>
+
+<!-- TRANSFORMATOR -->
+<div id="page-trafo" class="page">
+  <div class="card">
+    <div class="card-title">Transformatordata</div>
+    <div class="row"><label>Tomgångsförlust</label><input type="number" id="tf_tom" value="0.5" step="0.1" oninput="calcTrafo()"><span class="unit">kW</span></div>
+    <div class="row"><label>Belastningsförlust</label><input type="number" id="tf_bel" value="2.5" step="0.1" oninput="calcTrafo()"><span class="unit">kW</span></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Drifttid</div>
+    <div class="row"><label>Tomgång drifttid</label><input type="number" id="tf_tom_h" value="8760" step="1" oninput="calcTrafo()"><span class="unit">h/år</span></div>
+    <div class="row"><label>Belastad drifttid</label><input type="number" id="tf_bel_h" value="4000" step="100" oninput="calcTrafo()"><span class="unit">h/år</span></div>
+  </div>
+  <div class="card" style="background:#f5f0ff">
+    <div class="card-title">Resultat</div>
+    <div class="grid2">
+      <div class="metric"><div class="mn" id="tfr_el_e">–</div><div class="ml">Elenergi kWh/år</div></div>
+      <div class="metric"><div class="mn" id="tfr_el_k">–</div><div class="ml">Elkostnad kr/år</div></div>
+    </div>
+    <div class="result-row total"><span class="rlabel">Totalkostnad transformator</span><span class="rval" id="tfr_tot">–</span></div>
+  </div>
+</div>
+
+<!-- SAMMANFATTNING -->
+<div id="page-samman" class="page">
+  <div class="sum-total">
+    <div class="t1">Total driftkostnad per år</div>
+    <div class="t2" id="s_tot">–</div>
+  </div>
+  <div class="card">
+    <div class="card-title">Uppdelning per system</div>
+    <div class="sum-item"><span class="sum-name"><span class="sum-dot" style="background:#2196F3"></span>🔵 Ventilation</span><span class="sum-kr" id="s_vent">–</span></div>
+    <div class="sum-item"><span class="sum-name"><span class="sum-dot" style="background:#FF9800"></span>🟠 Pumpar/Värme</span><span class="sum-kr" id="s_pump">–</span></div>
+    <div class="sum-item"><span class="sum-name"><span class="sum-dot" style="background:#607D8B"></span>⚙️ Tryckluft</span><span class="sum-kr" id="s_tryck">–</span></div>
+    <div class="sum-item"><span class="sum-name"><span class="sum-dot" style="background:#00BCD4"></span>❄️ Vätskekyla</span><span class="sum-kr" id="s_kyla">–</span></div>
+    <div class="sum-item"><span class="sum-name"><span class="sum-dot" style="background:#FFC107"></span>💡 Belysning</span><span class="sum-kr" id="s_belys">–</span></div>
+    <div class="sum-item"><span class="sum-name"><span class="sum-dot" style="background:#9C27B0"></span>⚡ Transformator</span><span class="sum-kr" id="s_trafo">–</span></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Stapeldiagram</div>
+    <div id="chart-wrap"></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Uppdelning per energityp</div>
+    <div class="result-row"><span class="rlabel">Total elkostnad</span><span class="rval" id="s_el_tot">–</span></div>
+    <div class="result-row"><span class="rlabel">Total värmekostnad</span><span class="rval" id="s_vp_tot">–</span></div>
+    <div class="result-row"><span class="rlabel">Total kylkostnad</span><span class="rval" id="s_kyl_tot">–</span></div>
+  </div>
+</div>
+
+<script>
+function n(id){return parseFloat(document.getElementById(id).value)||0;}
+function kr(v){return Math.round(v).toLocaleString('sv-SE')+' kr/år';}
+function kwh(v){return Math.round(v).toLocaleString('sv-SE');}
+function set(id,val){var el=document.getElementById(id);if(el)el.textContent=val;}
+
+function showPage(name, btn){
+  document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active');});
+  document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active');});
+  document.getElementById('page-'+name).classList.add('active');
+  btn.classList.add('active');
+}
+
+function updProj(){
+  document.getElementById('proj-label').textContent = document.getElementById('i_proj').value || 'Mitt projekt';
+}
+
+var results = {vent:0, pump:0, tryck:0, kyla:0, belys:0, trafo:0, el_vent:0, el_pump:0, el_tryck:0, el_kyla:0, el_belys:0, el_trafo:0, vp_vent:0, vp_pump:0};
+
+function calcVent(){
+  var ep=n('i_el'), vp=n('i_vp');
+  var q=n('v_flode'), e_till=n('v_el_till'), e_fran=n('v_el_fran');
+  var t_till=n('v_t_till'), t_fran=n('v_t_fran'), vvx=n('v_vvx');
+  var h=n('v_h_dag'), d=n('v_dagar');
+  var sfp = q>0 ? Math.round((e_till+e_fran)/q*100)/100 : 0;
+  var drift = h*d;
+  var varme_eff = 2.0*q*(t_fran-t_till)*vvx;
+  var el_e = (e_till+e_fran)*drift;
+  var vp_e = varme_eff*drift;
+  var el_k = el_e*ep;
+  var vp_k = vp_e*vp;
+  var tot = el_k+vp_k;
+  set('vr_sfp', sfp.toFixed(2));
+  set('vr_drift', kwh(drift));
+  set('vr_el_e', kwh(el_e));
+  set('vr_vp_e', kwh(vp_e));
+  set('vr_el_k', kr(el_k));
+  set('vr_vp_k', kr(vp_k));
+  set('vr_tot', kr(tot));
+  results.vent=tot; results.el_vent=el_k; results.vp_vent=vp_k;
+  updSamman();
+}
+
+function calcPump(){
+  var ep=n('i_el'), vp=n('i_vp');
+  var el=n('p_el'), ve=n('p_vp');
+  var h=n('p_h_dag'), d=n('p_dagar');
+  var drift=h*d;
+  var el_e=el*drift, vp_e=ve*drift;
+  var el_k=el_e*ep, vp_k=vp_e*vp;
+  var tot=el_k+vp_k;
+  set('pr_drift', kwh(drift));
+  set('pr_el_e', kwh(el_e));
+  set('pr_vp_e', kwh(vp_e));
+  set('pr_el_k', kr(el_k));
+  set('pr_vp_k', kr(vp_k));
+  set('pr_tot', kr(tot));
+  results.pump=tot; results.el_pump=el_k; results.vp_pump=vp_k;
+  updSamman();
+}
+
+function calcTryck(){
+  var ep=n('i_el');
+  var e_pa=n('t_el_pa'), e_av=n('t_el_av'), and_pa=n('t_and_pa');
+  var and_av=Math.round((1-and_pa)*100)/100;
+  var h=n('t_h_dag'), d=n('t_dagar');
+  var drift=h*d;
+  var eff_medd=e_pa*and_pa+e_av*and_av;
+  var el_e=eff_medd*drift;
+  var el_k=el_e*ep;
+  set('tr_drift', kwh(drift));
+  set('tr_el_e', kwh(el_e));
+  set('tr_tot', kr(el_k));
+  results.tryck=el_k; results.el_tryck=el_k;
+  updSamman();
+}
+
+function calcKyla(){
+  var ep=n('i_el');
+  var el=n('k_el');
+  var h=n('k_h_dag'), d=n('k_dagar');
+  var drift=h*d;
+  var el_e=el*drift;
+  var el_k=el_e*ep;
+  set('kr_drift', kwh(drift));
+  set('kr_el_e', kwh(el_e));
+  set('kr_tot', kr(el_k));
+  results.kyla=el_k; results.el_kyla=el_k;
+  updSamman();
+}
+
+function calcBelys(){
+  var ep=n('i_el');
+  var el=n('b_el'), area=n('b_area');
+  var h=n('b_h_dag'), d=n('b_dagar');
+  var drift=h*d;
+  var specifik=area>0?Math.round(el*1000/area):0;
+  var el_e=el*drift;
+  var el_k=el_e*ep;
+  set('br_specifik', specifik);
+  set('br_drift', kwh(drift));
+  set('br_el_e', kwh(el_e));
+  set('br_el_k', kr(el_k));
+  set('br_tot', kr(el_k));
+  results.belys=el_k; results.el_belys=el_k;
+  updSamman();
+}
+
+function calcTrafo(){
+  var ep=n('i_el');
+  var tom=n('tf_tom'), bel=n('tf_bel');
+  var h_tom=n('tf_tom_h'), h_bel=n('tf_bel_h');
+  var el_e=tom*h_tom+bel*h_bel;
+  var el_k=el_e*ep;
+  set('tfr_el_e', kwh(el_e));
+  set('tfr_el_k', kr(el_k));
+  set('tfr_tot', kr(el_k));
+  results.trafo=el_k; results.el_trafo=el_k;
+  updSamman();
+}
+
+function updSamman(){
+  var tot=results.vent+results.pump+results.tryck+results.kyla+results.belys+results.trafo;
+  var el_tot=results.el_vent+results.el_pump+results.el_tryck+results.el_kyla+results.el_belys+results.el_trafo;
+  var vp_tot=results.vp_vent+results.vp_pump;
+  set('s_tot', Math.round(tot).toLocaleString('sv-SE')+' kr/år');
+  set('s_vent', kr(results.vent));
+  set('s_pump', kr(results.pump));
+  set('s_tryck', kr(results.tryck));
+  set('s_kyla', kr(results.kyla));
+  set('s_belys', kr(results.belys));
+  set('s_trafo', kr(results.trafo));
+  set('s_el_tot', kr(el_tot));
+  set('s_vp_tot', kr(vp_tot));
+  set('s_kyl_tot', kr(results.el_kyla));
+
+  // Stapeldiagram
+  var items=[
+    {label:'Ventilation', val:results.vent, color:'#2196F3'},
+    {label:'Pumpar', val:results.pump, color:'#FF9800'},
+    {label:'Tryckluft', val:results.tryck, color:'#607D8B'},
+    {label:'Kyla', val:results.kyla, color:'#00BCD4'},
+    {label:'Belysning', val:results.belys, color:'#FFC107'},
+    {label:'Trafo', val:results.trafo, color:'#9C27B0'},
+  ];
+  var maxVal=Math.max.apply(null, items.map(function(i){return i.val;}));
+  var html='';
+  items.forEach(function(item){
+    var pct=maxVal>0?Math.round(item.val/maxVal*100):0;
+    html+='<div class="chart-bar">';
+    html+='<span class="cb-label">'+item.label+'</span>';
+    html+='<div class="cb-track"><div class="cb-fill" style="width:'+pct+'%;background:'+item.color+'"></div></div>';
+    html+='<span class="cb-val">'+Math.round(item.val/1000*10)/10+'k</span>';
+    html+='</div>';
+  });
+  document.getElementById('chart-wrap').innerHTML=html;
+}
+
+function calcAll(){
+  calcVent(); calcPump(); calcTryck(); calcKyla(); calcBelys(); calcTrafo();
+}
+
+calcAll();
+</script>
+</body>
+</html>
